@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zerooo</title>
+<style>
+:root{
+  --bg:#0f1117; --panel:#171a22; --panel2:#1e222d; --text:#eef1f7;
+  --muted:#9aa3b2; --line:#2d3340; --accent:#6ea8fe; --user:#263858;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.app{height:100vh;display:flex}
+.sidebar{width:260px;background:#12151d;border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:14px}
+.brand{font-size:25px;font-weight:700;letter-spacing:.5px;padding:6px 8px}
+.brand span{color:var(--accent)}
+button{border:0;border-radius:10px;padding:11px 14px;font:inherit;cursor:pointer}
+.new{background:var(--accent);color:#08111f;font-weight:700}
+.clear{background:var(--panel2);color:var(--text)}
+.status{margin-top:auto;color:var(--muted);font-size:13px;padding:10px;border-top:1px solid var(--line)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#777;margin-right:7px}
+.dot.ok{background:#4ade80}.dot.bad{background:#f87171}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{height:58px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 24px;font-weight:600}
+.top small{margin-left:10px;color:var(--muted);font-weight:400}
+.chat{flex:1;overflow:auto;padding:28px max(20px,calc((100vw - 1050px)/2));}
+.welcome{max-width:760px;margin:12vh auto;text-align:center}
+.welcome h1{font-size:42px;margin-bottom:10px}.welcome p{color:var(--muted)}
+.msg{max-width:900px;margin:0 auto 22px;display:flex;gap:12px}
+.avatar{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--panel2);font-size:14px;font-weight:700;flex:0 0 auto}
+.msg.user .avatar{background:var(--user)}
+.bubble{line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;padding:4px 2px;flex:1}
+.msg.user .bubble{background:var(--panel);border:1px solid var(--line);padding:13px 15px;border-radius:14px}
+.composer-wrap{padding:14px max(20px,calc((100vw - 1050px)/2)) 24px}
+.composer{max-width:900px;margin:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:10px;display:flex;gap:10px}
+textarea{flex:1;resize:none;min-height:48px;max-height:180px;border:0;outline:0;background:transparent;color:var(--text);font:inherit;padding:12px}
+.send{background:var(--accent);color:#08111f;font-weight:700;min-width:82px}
+.send:disabled{opacity:.45;cursor:not-allowed}
+.hint{text-align:center;color:var(--muted);font-size:12px;margin-top:9px}
+@media(max-width:700px){.sidebar{display:none}.chat{padding:18px}.composer-wrap{padding:12px}.welcome h1{font-size:34px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">Zero<span>oo</span></div>
+    <button class="new" onclick="newChat()">＋ New chat</button>
+    <button class="clear" onclick="newChat()">Clear conversation</button>
+    <div class="status"><span id="dot" class="dot"></span><span id="status">Checking local AI...</span></div>
+  </aside>
+
+  <main class="main">
+    <div class="top">Zerooo <small>Qwen3-4B-Thinking</small></div>
+    <div id="chat" class="chat">
+      <div id="welcome" class="welcome">
+        <h1>Hello, I’m Zerooo.</h1>
+        <p>Your local AI is ready to talk. Everything stays on your computer/USB.</p>
+      </div>
+    </div>
+    <div class="composer-wrap">
+      <div class="composer">
+        <textarea id="input" placeholder="Message Zerooo..." onkeydown="keySend(event)"></textarea>
+        <button id="send" class="send" onclick="sendMessage()">Send</button>
+      </div>
+      <div class="hint">Enter to send · Shift+Enter for a new line</div>
+    </div>
+  </main>
+</div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8080";
+let messages = [];
+let busy = false;
+
+function setStatus(ok, text){
+  document.getElementById("status").textContent = text;
+  document.getElementById("dot").className = "dot " + (ok ? "ok" : "bad");
+}
+
+async function checkServer(){
+  try{
+    const r = await fetch(API_BASE + "/health", {cache:"no-store"});
+    if(!r.ok) throw new Error();
+    setStatus(true, "Local AI connected");
+  }catch(e){
+    try{
+      const r = await fetch(API_BASE + "/v1/models", {cache:"no-store"});
+      if(!r.ok) throw new Error();
+      setStatus(true, "Local AI connected");
+    }catch(e2){
+      setStatus(false, "Waiting for local AI...");
+    }
+  }
+}
+setInterval(checkServer, 3000); checkServer();
+
+function escapeHTML(s){
+  const d=document.createElement("div"); d.textContent=s; return d.innerHTML;
+}
+function addMessage(role, text){
+  document.getElementById("welcome")?.remove();
+  const wrap=document.createElement("div");
+  wrap.className="msg " + role;
+  wrap.innerHTML=`<div class="avatar">${role==="user"?"You":"Z"}</div><div class="bubble">${escapeHTML(text)}</div>`;
+  document.getElementById("chat").appendChild(wrap);
+  document.getElementById("chat").scrollTop=1e9;
+  return wrap.querySelector(".bubble");
+}
+function keySend(e){
+  if(e.key==="Enter" && !e.shiftKey){e.preventDefault();sendMessage();}
+}
+function newChat(){
+  messages=[];
+  document.getElementById("chat").innerHTML=`<div id="welcome" class="welcome"><h1>Hello, I’m Zerooo.</h1><p>Start a new local conversation.</p></div>`;
+  document.getElementById("input").focus();
+}
+async function sendMessage(){
+  const input=document.getElementById("input");
+  const text=input.value.trim();
+  if(!text || busy) return;
+  busy=true; document.getElementById("send").disabled=true;
+  addMessage("user", text);
+  messages.push({role:"user",content:text});
+  input.value="";
+  const out=addMessage("assistant","Thinking...");
+  try{
+    const payload={messages:messages,temperature:0.7,stream:false};
+    const r=await fetch(API_BASE + "/v1/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    if(!r.ok) throw new Error("Server returned HTTP "+r.status);
+    const data=await r.json();
+    const answer=data?.choices?.[0]?.message?.content ?? data?.content ?? "No response received.";
+    out.textContent=answer;
+    messages.push({role:"assistant",content:answer});
+    setStatus(true,"Local AI connected");
+  }catch(err){
+    out.textContent="Cannot reach the local AI yet.\n\nMake sure start_qwen_gpu.bat starts the server on port 8080, then try again.\n\nError: "+err.message;
+    setStatus(false,"Local AI not reachable");
+  }finally{
+    busy=false; document.getElementById("send").disabled=false; input.focus();
+  }
+}
+</script>
+</body>
+</html>
